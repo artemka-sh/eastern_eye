@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 4.0) # C++23 требует минимум 3.20+, 3.22 — золотой стандарт
+
+project(eastern_eye VERSION 1.0)
+
+# --- 1. Глобальные настройки проекта ---
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Настройка ccache для ускорения пересборки
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+endif()
+
+# --- 2. Поиск зависимостей ---
+# Добавляем COMPONENTS, чтобы CMake точно нашел библиотеку трекинга
+find_package(OpenCV REQUIRED COMPONENTS core imgproc video tracking)
+
+# --- 3. Определение исходников ---
+file(GLOB_RECURSE SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+
+# --- 4. Создание исполняемого файла ---
+add_executable(${PROJECT_NAME} ${SRC_FILES})
+
+# --- 5. Настройка параметров таргета (инклуды и опции) ---
+target_include_directories(${PROJECT_NAME} PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${OpenCV_INCLUDE_DIRS}
+)
+
+target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:
+        -march=native
+        -mtune=native
+        -O3
+        -ffast-math
+        -Wall
+        -Wextra
+        >
+)
+
+# --- 6. Линковка библиотек ---
+# Переменная ${OpenCV_LIBS} уже содержит все найденные компоненты (включая tracking)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBS})
