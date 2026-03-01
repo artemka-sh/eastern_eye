@@ -15,13 +15,21 @@ struct Defect {
     std::string type;
 };
 
+// Геометрия (Физическое состояние в конкретный момент)
+struct DetectedBoard {
+    cv::RotatedRect rBox;             // Повернутый прямоугольник (центр, габариты, общий наклон)
+    std::vector<cv::Point2f> corners; // 4 точных угла доски (субпиксельные)
+    std::vector<double> angles;       // 4 угла между гранями (в градусах)
+    bool isGeometryValid;             // Удалось ли найти ровно 4 угла (не кусок мусора)
+};
+
+
 // Состояние отслеживаемой доски
 struct BoardTrack {
     int id;
-    cv::Rect bbox;
-    cv::Point2f centroid;
+    DetectedBoard geometry;
     
-    cv::Ptr<cv::Tracker> tracker;  /////////////////////////////////////////////////
+    cv::Ptr<cv::Tracker> tracker;
     
     int framesSeen = 0;
     int framesLost = 0;
@@ -36,6 +44,8 @@ struct BoardTrack {
     
     // TODO: Добавить "отпечаток пальца" доски для реидентификации
     // BoardFingerprint fingerprint;
+    cv::Point2f getCentroid() const { return geometry.rBox.center; }
+    cv::Rect getBoundingBox() const { return geometry.rBox.boundingRect(); }
 };
 
 // Статистика работы системы

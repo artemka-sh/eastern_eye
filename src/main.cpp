@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
     InspectionSystem system;
 
     // Настройки под конвейер (можно менять)
-    system.setAnalysisZone(500, 700);  // Зона где анализируем доски
+    system.setAnalysisZone(0, 480);  // Зона где анализируем доски
     system.setLineStopThreshold(60);   // Push через 60 секунд без движения
 
     cv::Mat frame;

@@ -6,8 +6,11 @@ void BoardAnalyzer::analyze(const cv::Mat& frame, BoardTrack& track) {
     if (track.analyzed)
         return;
     
-    cv::Mat boardROI = frame(track.bbox);
-    
+    cv::Rect bbox = track.getBoundingBox() & cv::Rect(0, 0, frame.cols, frame.rows);
+    if (bbox.width < 4 || bbox.height < 4)
+        return;
+    cv::Mat boardROI = frame(bbox);
+
     // Анализ цвета
     track.avgColor = analyzeColor(boardROI);
     

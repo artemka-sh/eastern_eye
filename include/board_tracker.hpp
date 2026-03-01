@@ -1,32 +1,36 @@
 #pragma once
 
 #include "types.hpp"
+#include <vector>
 #include <memory>
+#include <opencv2/video/tracking.hpp>
+#include <opencv2/tracking.hpp>
 
 class BoardTracker {
 public:
     BoardTracker();
-    
-    void update(const cv::Mat& frame, const std::vector<cv::Rect>& detections);
-    
+
+    // Принимает кадр и свежие детекции (вектор может быть пустым, если детектор в этом кадре отдыхал)
+    void update(const cv::Mat& frame, const std::vector<DetectedBoard>& detections);
+
     std::vector<BoardTrack>& getActiveTracks() { return activeTracks_; }
     const std::vector<BoardTrack>& getActiveTracks() const { return activeTracks_; }
-    
+
     int getTotalCounted() const { return totalCounted_; }
-    
+
     void setCountLineX(int x) { countLineX_ = x; }
     void setMinFramesStable(int frames) { minFramesStable_ = frames; }
 
 private:
-    void matchDetectionsToTracks(const cv::Mat& frame,  // ← Добавлен параметр frame
-                                 const std::vector<cv::Rect>& detections,
+    // Теперь методы работают с DetectedBoard, а не с Rect!
+    void matchDetectionsToTracks(const cv::Mat& frame,
+                                 const std::vector<DetectedBoard>& detections,
                                  std::vector<bool>& matched);
-    void createNewTrack(const cv::Mat& frame, const cv::Rect& bbox);
+    void createNewTrack(const cv::Mat& frame, const DetectedBoard& board);
     void countBoards();
     void cleanupLostTracks(int frameWidth);
 
     float computeIoU(const cv::Rect& a, const cv::Rect& b) const;
-    cv::Point2f getCentroid(const cv::Rect& bbox) const;
 
     std::vector<BoardTrack> activeTracks_;
 

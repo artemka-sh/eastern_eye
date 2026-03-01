@@ -1,60 +1,66 @@
+
 #include "board_tracker.hpp"
-#include <opencv2/video/tracking.hpp> // Для cv::Tracker
-#include <opencv2/tracking.hpp>       // Для cv::TrackerKCF
 #include <algorithm>
 
 BoardTracker::BoardTracker() = default;
 
-void BoardTracker::update(const cv::Mat& frame, const std::vector<cv::Rect>& detections) {
-    // 1. Обновляем существующие трекеры
+void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>& detections) {
+    // 1. Обновляем координаты всех треков с помощью KCF
     for (auto& track : activeTracks_) {
-        // Конвертируем Rect в Rect2d для API трекера
-        cv::Rect2i bboxDouble = track.bbox; /////////////////////////////////
-        bool success = track.tracker->update(frame, bboxDouble);
+        cv::Rect bbox = track.getBoundingBox(); // Берем текущий AABB
+
+        // Трекер пытается найти доску на новом кадре
+        bool success = track.tracker->update(frame, bbox);
 
         if (success) {
-            track.bbox = bboxDouble;  // Конвертируем обратно
+            // Если KCF нашел доску, мы сдвигаем математический центр нашей геометрии
+            track.geometry.rBox.center = cv::Point2f(bbox.x + bbox.width / 2.0f, bbox.y + bbox.height / 2.0f);
+            track.geometry.rBox.size = cv::Size2f(bbox.width, bbox.height);
+
             track.framesSeen++;
-            track.framesLost = 0;
-            track.centroid = getCentroid(track.bbox);
+            // Не сбрасываем framesLost здесь, ждем подтверждения от детектора
         } else {
             track.framesLost++;
         }
     }
 
-    // 2. Матчим новые детекции с существующими треками
-    std::vector<bool> detectionMatched(detections.size(), false);
-    matchDetectionsToTracks(frame, detections, detectionMatched);
+    // 2. Если в этом кадре отработал Детектор, матчим его результаты с треками
+    if (!detections.empty()) {
+        std::vector<bool> detectionMatched(detections.size(), false);
+        matchDetectionsToTracks(frame, detections, detectionMatched);
 
-    // 3. Создаём новые треки
-    for (size_t i = 0; i < detections.size(); ++i) {
-        if (!detectionMatched[i]) {
-            createNewTrack(frame, detections[i]);
+        // 3. Создаём новые треки для детекций, которые ни с кем не совпали
+        for (size_t i = 0; i < detections.size(); ++i) {
+            if (!detectionMatched[i]) {
+                createNewTrack(frame, detections[i]);
+            }
         }
     }
 
-    // 4. Подсчёт досок
+    // 4. Подсчёт досок, пересекших линию
     countBoards();
 
-    // 5. Очистка
+    // 5. Удаление потерянных и уехавших треков
     cleanupLostTracks(frame.cols);
 }
 
 void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
-                                           const std::vector<cv::Rect>& detections,
+                                           const std::vector<DetectedBoard>& detections,
                                            std::vector<bool>& matched) {
     for (auto& track : activeTracks_) {
-        if (track.framesLost > 5)
-            continue;
+        if (track.framesLost > maxFramesLost_) continue;
 
         float bestIoU = 0.0f;
         int bestIdx = -1;
 
-        for (size_t i = 0; i < detections.size(); ++i) {
-            if (matched[i])
-                continue;
+        cv::Rect trackBbox = track.getBoundingBox();
 
-            float iou = computeIoU(track.bbox, detections[i]);
+        // Ищем детекцию, которая лучше всего накладывается на текущий трек
+        for (size_t i = 0; i < detections.size(); ++i) {
+            if (matched[i]) continue;
+
+            cv::Rect detBbox = detections[i].rBox.boundingRect();
+            float iou = computeIoU(trackBbox, detBbox);
 
             if (iou > bestIoU && iou > minIouMatch_) {
                 bestIoU = iou;
@@ -62,38 +68,45 @@ void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
             }
         }
 
+        // БИНГО! Мы сопоставили трек и свежую детекцию
         if (bestIdx >= 0) {
-            track.tracker = cv::TrackerKCF::create();
-            cv::Rect2d bboxDouble = detections[bestIdx];
-            track.tracker->init(frame, bboxDouble);
-            track.bbox = detections[bestIdx];
-            track.centroid = getCentroid(detections[bestIdx]);
+            // 1. ПОЛНОСТЬЮ ОБНОВЛЯЕМ ГЕОМЕТРИЮ (теперь у нас свежие, точные углы!)
+            track.geometry = detections[bestIdx];
             track.framesLost = 0;
+
+            // 2. Перезапускаем KCF с новой точной рамки, чтобы он не "уплывал" со временем
+            track.tracker = cv::TrackerKCF::create();
+            track.tracker->init(frame, track.getBoundingBox());
+
             matched[bestIdx] = true;
+        } else {
+            // Если трек не нашел детекцию в этот проход, он начинает теряться
+            track.framesLost++;
         }
     }
 }
 
-void BoardTracker::createNewTrack(const cv::Mat& frame, const cv::Rect& bbox) {
+void BoardTracker::createNewTrack(const cv::Mat& frame, const DetectedBoard& board) {
     BoardTrack track;
     track.id = nextId_++;
-    track.bbox = bbox;
-    track.centroid = getCentroid(bbox);
-    track.tracker = cv::TrackerKCF::create();
 
-    cv::Rect2d bboxDouble = bbox;
-    track.tracker->init(frame, bboxDouble);
+    // Сохраняем всю прецизионную геометрию сразу при рождении трека
+    track.geometry = board;
+
+    track.tracker = cv::TrackerKCF::create();
+    track.tracker->init(frame, track.getBoundingBox());
 
     activeTracks_.push_back(std::move(track));
 }
 
 void BoardTracker::countBoards() {
     for (auto& track : activeTracks_) {
-        if (!track.counted && 
-            track.centroid.x > countLineX_ &&
+        // Заменили track.centroid.x на track.getCentroid().x
+        if (!track.counted &&
+            track.getCentroid().x > countLineX_ &&
             track.framesSeen > minFramesStable_ &&
             track.framesLost == 0) {
-            
+
             track.counted = true;
             totalCounted_++;
         }
@@ -104,7 +117,8 @@ void BoardTracker::cleanupLostTracks(int frameWidth) {
     activeTracks_.erase(
         std::remove_if(activeTracks_.begin(), activeTracks_.end(),
             [this, frameWidth](const BoardTrack& t) {
-                return t.framesLost > maxFramesLost_ || t.bbox.x > frameWidth + 100;
+                // Удаляем, если слишком долго не видели или доска уехала за правый край
+                return t.framesLost > maxFramesLost_ || t.getBoundingBox().x > frameWidth + 100;
             }),
         activeTracks_.end()
     );
@@ -112,15 +126,10 @@ void BoardTracker::cleanupLostTracks(int frameWidth) {
 
 float BoardTracker::computeIoU(const cv::Rect& a, const cv::Rect& b) const {
     cv::Rect intersection = a & b;
-    if (intersection.area() == 0)
-        return 0.0f;
-    
+    if (intersection.area() == 0) return 0.0f;
+
     float intersectArea = static_cast<float>(intersection.area());
     float unionArea = static_cast<float>(a.area() + b.area()) - intersectArea;
-    
-    return unionArea > 0 ? intersectArea / unionArea : 0.0f;
-}
 
-cv::Point2f BoardTracker::getCentroid(const cv::Rect& bbox) const {
-    return cv::Point2f(bbox.x + bbox.width / 2.0f, bbox.y + bbox.height / 2.0f);
+    return unionArea > 0 ? intersectArea / unionArea : 0.0f;
 }

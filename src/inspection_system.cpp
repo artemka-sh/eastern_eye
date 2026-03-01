@@ -9,10 +9,10 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
     frameCount_++;
     
     // Периодическая детекция досок
-    std::vector<cv::Rect> detections;
+    std::vector<DetectedBoard> detections;
     if (frameCount_ % detectInterval_ == 0) {
         detections = detector_.detect(frame);
-        stats_.totalDetected = static_cast<int>(detections.size());
+        //TODO stats_.totalDetected = static_cast<int>(detections.size());
     }
     
     // Обновление трекера
@@ -22,19 +22,19 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
     if (!tracker_.getActiveTracks().empty()) {
         stats_.lastMotionTime = std::chrono::steady_clock::now();
     }
-    
+
     // Анализ досок в зоне анализа
     for (auto& track : tracker_.getActiveTracks()) {
         if (isInAnalysisZone(track) && !track.analyzed) {
             analyzer_.analyze(frame, track);
-            
+
             // Обновляем статистику категорий только для посчитанных
             if (track.counted) {
                 stats_.categoryCounts[track.category]++;
             }
         }
     }
-    
+
     // Обновляем общий счётчик
     stats_.totalCounted = tracker_.getTotalCounted();
 }
@@ -62,7 +62,7 @@ void InspectionSystem::draw(cv::Mat& frame) const {
             color = cv::Scalar(255, 0, 0);  // Синий - активна
         }
         
-        cv::rectangle(frame, track.bbox, color, 2);
+        cv::rectangle(frame, track.getBoundingBox(), color, 2);
         
         // ID и категория
         std::string label = "ID:" + std::to_string(track.id);
@@ -71,18 +71,18 @@ void InspectionSystem::draw(cv::Mat& frame) const {
         }
         
         cv::putText(frame, label, 
-                   cv::Point(track.bbox.x, track.bbox.y - 5),
+                   cv::Point(track.getBoundingBox().x, track.getBoundingBox().y - 5),
                    cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 2);
         
         // Центроид
-        cv::circle(frame, track.centroid, 4, color, -1);
+        cv::circle(frame, track.getCentroid(), 4, color, -1);
         
         // Дефекты (если есть)
         if (track.analyzed && !track.defects.empty()) {
             for (const auto& defect : track.defects) {
                 cv::Rect globalDefect = defect.bbox;
-                globalDefect.x += track.bbox.x;
-                globalDefect.y += track.bbox.y;
+                globalDefect.x += track.getBoundingBox().x;
+                globalDefect.y += track.getBoundingBox().y;
                 cv::rectangle(frame, globalDefect, cv::Scalar(0, 0, 255), 1);
             }
         }
@@ -112,8 +112,8 @@ void InspectionSystem::draw(cv::Mat& frame) const {
 }
 
 bool InspectionSystem::isInAnalysisZone(const BoardTrack& track) const {
-    return track.centroid.x >= analysisZoneXMin_ && 
-           track.centroid.x <= analysisZoneXMax_;
+    return track.getCentroid().x >= analysisZoneXMin_ &&
+           track.getCentroid().x <= analysisZoneXMax_;
 }
 
 bool InspectionSystem::isLineStopped() const {
