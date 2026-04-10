@@ -21,6 +21,8 @@ struct DetectedBoard {
     std::vector<cv::Point2f> corners; // 4 точных угла доски (субпиксельные)
     std::vector<double> angles;       // 4 угла между гранями (в градусах)
     bool isGeometryValid;             // Удалось ли найти ровно 4 угла (не кусок мусора)
+    int area_;
+    double relativeArea_; //%
 };
 
 
@@ -62,3 +64,12 @@ struct SystemStats {
         lastMotionTime = std::chrono::steady_clock::now();
     }
 };
+
+namespace Color {
+    const cv::Scalar RED    = {0, 0, 255};
+    const cv::Scalar GREEN  = {0, 255, 0};
+    const cv::Scalar BLUE   = {255, 0, 0};
+    const cv::Scalar YELLOW = {0, 255, 255};
+    const cv::Scalar CYAN   = {255, 255, 0};
+    const cv::Scalar ORANGE = cv::Scalar(0, 165, 255);
+}

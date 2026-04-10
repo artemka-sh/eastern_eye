@@ -8,15 +8,13 @@ InspectionSystem::InspectionSystem() {
 void InspectionSystem::processFrame(const cv::Mat& frame) {
     frameCount_++;
     
-    // Периодическая детекция досок
     std::vector<DetectedBoard> detections;
     if (frameCount_ % detectInterval_ == 0) {
-        detections = detector_.detect(frame);
-        //TODO stats_.totalDetected = static_cast<int>(detections.size());
+        auto detections = detector_.detect(frame);
+        tracker_.update(frame, detections);
+    } else {
+        tracker_.update(frame, {}); // пустой вектор — KCF просто двигает треки
     }
-    
-    // Обновление трекера
-    tracker_.update(frame, detections);
     
     // Проверка движения
     if (!tracker_.getActiveTracks().empty()) {
@@ -37,29 +35,29 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
 
     // Обновляем общий счётчик
     stats_.totalCounted = tracker_.getTotalCounted();
+    stats_.totalDetected = static_cast<int>(detections.size());
+
 }
 
 void InspectionSystem::draw(cv::Mat& frame) const {
-    // Рисуем линию подсчёта
-    cv::line(frame, cv::Point(800, 0), cv::Point(800, frame.rows), 
-             cv::Scalar(0, 255, 255), 2);
     
     // Рисуем зону анализа
+    // TODO рисовать - не значит исползовать.
     cv::rectangle(frame, 
-                 cv::Point(analysisZoneXMin_, 0),
-                 cv::Point(analysisZoneXMax_, frame.rows),
-                 cv::Scalar(255, 255, 0), 2);
+                 cv::Point(analysisZoneXMin_, analysisZoneYMin_),
+                 cv::Point(analysisZoneXMax_, analysisZoneYMax_),
+                 cv::Scalar(Color::CYAN), 2);
     
     // Рисуем треки
     for (const auto& track : tracker_.getActiveTracks()) {
         cv::Scalar color;
         
         if (track.counted) {
-            color = cv::Scalar(0, 255, 0);  // Зелёный - посчитана
+            color = cv::Scalar(Color::GREEN);  // Зелёный - посчитана
         } else if (track.framesLost > 0) {
-            color = cv::Scalar(0, 165, 255);  // Оранжевый - потеря
+            color = cv::Scalar(Color::ORANGE);  // Оранжевый - потеря
         } else {
-            color = cv::Scalar(255, 0, 0);  // Синий - активна
+            color = cv::Scalar(Color::BLUE);  // Синий - активна
         }
         
         cv::rectangle(frame, track.getBoundingBox(), color, 2);
@@ -69,7 +67,7 @@ void InspectionSystem::draw(cv::Mat& frame) const {
         if (track.analyzed) {
             label += " " + track.category;
         }
-        
+        label += " r_area:" + std::to_string(track.geometry.relativeArea_);
         cv::putText(frame, label, 
                    cv::Point(track.getBoundingBox().x, track.getBoundingBox().y - 5),
                    cv::FONT_HERSHEY_SIMPLEX, 0.5, color, 2);
@@ -83,7 +81,7 @@ void InspectionSystem::draw(cv::Mat& frame) const {
                 cv::Rect globalDefect = defect.bbox;
                 globalDefect.x += track.getBoundingBox().x;
                 globalDefect.y += track.getBoundingBox().y;
-                cv::rectangle(frame, globalDefect, cv::Scalar(0, 0, 255), 1);
+                cv::rectangle(frame, globalDefect, cv::Scalar(Color::RED), 1);
             }
         }
     }
@@ -92,7 +90,7 @@ void InspectionSystem::draw(cv::Mat& frame) const {
     std::string stats = "Active: " + std::to_string(tracker_.getActiveTracks().size()) +
                        " | Counted: " + std::to_string(stats_.totalCounted);
     cv::putText(frame, stats, cv::Point(10, 30),
-               cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
+               cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(Color::GREEN), 2);
     
     // Категории
     int y = 60;

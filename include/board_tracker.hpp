@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <vector>
+#include <unordered_set>
 #include <memory>
 #include <opencv2/video/tracking.hpp>
 #include <opencv2/tracking.hpp>
@@ -33,6 +34,7 @@ private:
     float computeIoU(const cv::Rect& a, const cv::Rect& b) const;
 
     std::vector<BoardTrack> activeTracks_;
+    std::unordered_set<int> toRemove_;
 
     int nextId_ = 0;
     int totalCounted_ = 0;

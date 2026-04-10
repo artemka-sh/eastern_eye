@@ -16,9 +16,9 @@ public:
     const SystemStats& getStats() const { return stats_; }
     
     // Настройки зоны анализа
-    void setAnalysisZone(int xMin, int xMax) {
-        analysisZoneXMin_ = xMin;
-        analysisZoneXMax_ = xMax;
+    void setAnalysisZone(int xMin = 0, int xMax = 0, int yMin = 0, int yMax = 0) {
+        analysisZoneXMin_ = xMin;      analysisZoneXMax_ = xMax;
+        analysisZoneYMin_ = yMin;      analysisZoneYMax_ = yMax;
     }
     
     // Мониторинг остановки линии
@@ -36,10 +36,10 @@ private:
     SystemStats stats_;
     
     int frameCount_ = 0;
-    int detectInterval_ = 5;  // Детекция каждые 5 кадров
+    int detectInterval_ = 10;
     
-    int analysisZoneXMin_ = 500;
-    int analysisZoneXMax_ = 700;
+    int analysisZoneXMin_; int analysisZoneXMax_;
+    int analysisZoneYMin_; int analysisZoneYMax_;
     
     int lineStopThresholdSec_ = 60;  // Порог остановки (секунды)
     

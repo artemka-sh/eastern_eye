@@ -1,6 +1,7 @@
 
 #include "board_tracker.hpp"
 #include <algorithm>
+#include <print>
 
 BoardTracker::BoardTracker() = default;
 
@@ -15,10 +16,9 @@ void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>
         if (success) {
             // Если KCF нашел доску, мы сдвигаем математический центр нашей геометрии
             track.geometry.rBox.center = cv::Point2f(bbox.x + bbox.width / 2.0f, bbox.y + bbox.height / 2.0f);
-            track.geometry.rBox.size = cv::Size2f(bbox.width, bbox.height);
+            // track.geometry.rBox.size = cv::Size2f(bbox.width, bbox.height);
 
             track.framesSeen++;
-            // Не сбрасываем framesLost здесь, ждем подтверждения от детектора
         } else {
             track.framesLost++;
         }
@@ -28,7 +28,11 @@ void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>
     if (!detections.empty()) {
         std::vector<bool> detectionMatched(detections.size(), false);
         matchDetectionsToTracks(frame, detections, detectionMatched);
-
+        activeTracks_.erase(
+        std::remove_if(activeTracks_.begin(), activeTracks_.end(),
+            [&](const BoardTrack& t) { return toRemove_.count(t.id); }),
+        activeTracks_.end()
+       );
         // 3. Создаём новые треки для детекций, которые ни с кем не совпали
         for (size_t i = 0; i < detections.size(); ++i) {
             if (!detectionMatched[i]) {
@@ -44,12 +48,16 @@ void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>
     cleanupLostTracks(frame.cols);
 }
 
+//TODO: эта часть кода не используется
+
 void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
                                            const std::vector<DetectedBoard>& detections,
                                            std::vector<bool>& matched) {
     for (auto& track : activeTracks_) {
-        if (track.framesLost > maxFramesLost_) continue;
-
+        if (track.framesLost > maxFramesLost_)
+        {
+            std::print("Максимальное количество кадров превышено {}", track.id);
+        }
         float bestIoU = 0.0f;
         int bestIdx = -1;
 
@@ -73,15 +81,18 @@ void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
             // 1. ПОЛНОСТЬЮ ОБНОВЛЯЕМ ГЕОМЕТРИЮ (теперь у нас свежие, точные углы!)
             track.geometry = detections[bestIdx];
             track.framesLost = 0;
-
             // 2. Перезапускаем KCF с новой точной рамки, чтобы он не "уплывал" со временем
             track.tracker = cv::TrackerKCF::create();
             track.tracker->init(frame, track.getBoundingBox());
-
             matched[bestIdx] = true;
-        } else {
-            // Если трек не нашел детекцию в этот проход, он начинает теряться
-            track.framesLost++;
+            for (const auto& other : activeTracks_)
+            {
+                if (other.id != track.id &&
+                    computeIoU(other.getBoundingBox(), track.getBoundingBox()) > minIouMatch_)
+                    {
+                        toRemove_.insert(other.id);
+                    }
+            }
         }
     }
 }

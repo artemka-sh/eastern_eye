@@ -12,8 +12,8 @@ public:
     std::vector<DetectedBoard> detect(const cv::Mat& frame);
 
     // Настройки детектора
-    void setMinArea(double area) { minArea_ = area; }
-    void setMaxArea(double area) { maxArea_ = area; }
+    void setMinArea(double area) { minRelativeArea_ = area; }
+    void setMaxArea(double area) { maxRelativeArea_ = area; }
     void setMinAspectRatio(float ratio) { minAspectRatio_ = ratio; }
     void setMaxAspectRatio(float ratio) { maxAspectRatio_ = ratio; }
     void setLabAThreshold(int thresh) { labAThreshold_ = thresh; }
@@ -23,12 +23,12 @@ private:
     double calculateAngle(cv::Point2f A, cv::Point2f B, cv::Point2f C);
 
     // Параметры фильтрации
-    double minArea_ = 5000.0;
-    double maxArea_ = 150000.0;
-    float minAspectRatio_ = 2.0f;
-    float maxAspectRatio_ = 15.0f;
-    int minY_ = 50;
-    int maxY_ = 1000;
+    double minRelativeArea_ = 0.05; //5%
+    double maxRelativeArea_ = DBL_MAX;
+    float minAspectRatio_ = 0;
+    float maxAspectRatio_ = FLT_MAX;
+    int minY_ = 0;
+    int maxY_ = INT_MAX;
 
     // Порог для канала 'a' в пространстве LAB (отсечение зеленого конвейера)
     // Значение 128 - нейтраль. Зеленый < 128, дерево > 128.

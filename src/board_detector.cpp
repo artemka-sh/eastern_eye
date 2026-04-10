@@ -1,6 +1,7 @@
 #include "board_detector.hpp"
 #include <cmath>
 #include <iostream>
+#include <print>
 
 BoardDetector::BoardDetector() {
     // Оставляем ядро 7x7 для морфологии
@@ -38,13 +39,14 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
     // 3. ПОИСК КОНТУРОВ
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    std::print("contours: {}", contours.size()); std::fflush(stdout);
 
     // 4. АНАЛИЗ КАЖДОЙ ДОСКИ
     for (const auto& contour : contours) {
         double area = cv::contourArea(contour);
-
+        double relativeArea = area / (frame.cols * frame.rows);
         // Фильтр по площади
-        if (area < minArea_ || area > maxArea_) continue;
+        if (relativeArea < minRelativeArea_ || area > maxRelativeArea_) continue;
 
         // Получаем повернутый прямоугольник
         cv::RotatedRect rBox = cv::minAreaRect(contour);
@@ -64,6 +66,10 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
         DetectedBoard board;
         board.rBox = rBox;
         board.isGeometryValid = false;
+
+        board.area_ = area;
+
+        board.relativeArea_ = relativeArea;
 
         std::vector<cv::Point> approx;
         // Эпсилон: чем больше, тем сильнее упрощается контур. 2% от периметра - хороший старт.

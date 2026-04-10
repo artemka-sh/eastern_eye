@@ -3,9 +3,10 @@
 BoardAnalyzer::BoardAnalyzer() = default;
 
 void BoardAnalyzer::analyze(const cv::Mat& frame, BoardTrack& track) {
+    return; //TODO АНАЛИЗА ДОСОК НЕТ
     if (track.analyzed)
         return;
-    
+
     cv::Rect bbox = track.getBoundingBox() & cv::Rect(0, 0, frame.cols, frame.rows);
     if (bbox.width < 4 || bbox.height < 4)
         return;
