@@ -45,7 +45,7 @@ void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>
     countBoards();
 
     // 5. Удаление потерянных и уехавших треков
-    cleanupLostTracks(frame.cols);
+    cleanupLostTracks();
 }
 
 //TODO: эта часть кода не используется
@@ -114,7 +114,7 @@ void BoardTracker::countBoards() {
     for (auto& track : activeTracks_) {
         // Заменили track.centroid.x на track.getCentroid().x
         if (!track.counted &&
-            track.getCentroid().x > countLineX_ &&
+            track.getCentroid().x > countLineX_ && track.getCentroid().y > countLineY_ &&
             track.framesSeen > minFramesStable_ &&
             track.framesLost == 0) {
 
@@ -124,12 +124,12 @@ void BoardTracker::countBoards() {
     }
 }
 
-void BoardTracker::cleanupLostTracks(int frameWidth) {
+void BoardTracker::cleanupLostTracks() {
     activeTracks_.erase(
         std::remove_if(activeTracks_.begin(), activeTracks_.end(),
-            [this, frameWidth](const BoardTrack& t) {
-                // Удаляем, если слишком долго не видели или доска уехала за правый край
-                return t.framesLost > maxFramesLost_ || t.getBoundingBox().x > frameWidth + 100;
+            [this](const BoardTrack& t) {
+                //удалить если потерян долго или слишком близко к верху (куда уходят доски)
+                return t.framesLost > maxFramesLost_ || t.getBoundingBox().y + t.getBoundingBox().height/3 < 0  + 100;
             }),
         activeTracks_.end()
     );

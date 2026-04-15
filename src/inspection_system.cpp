@@ -13,6 +13,7 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
         auto detections = detector_.detect(frame);
         tracker_.update(frame, detections);
     } else {
+
         tracker_.update(frame, {}); // пустой вектор — KCF просто двигает треки
     }
     

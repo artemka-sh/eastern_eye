@@ -36,7 +36,7 @@ private:
     SystemStats stats_;
     
     int frameCount_ = 0;
-    int detectInterval_ = 10;
+    int detectInterval_ = 1;
     
     int analysisZoneXMin_; int analysisZoneXMax_;
     int analysisZoneYMin_; int analysisZoneYMax_;

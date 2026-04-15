@@ -29,7 +29,7 @@ private:
                                  std::vector<bool>& matched);
     void createNewTrack(const cv::Mat& frame, const DetectedBoard& board);
     void countBoards();
-    void cleanupLostTracks(int frameWidth);
+    void cleanupLostTracks();
 
     float computeIoU(const cv::Rect& a, const cv::Rect& b) const;
 
@@ -41,6 +41,7 @@ private:
 
     float minIouMatch_ = 0.3f;
     int maxFramesLost_ = 15;
-    int countLineX_ = 800;
+    int countLineX_ = 0;
+    int countLineY_ = 0;
     int minFramesStable_ = 5;
 };
