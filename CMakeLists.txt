@@ -14,20 +14,26 @@ if(CCACHE_PROGRAM)
 endif()
 
 # --- 2. Поиск зависимостей ---
-# Добавляем COMPONENTS, чтобы CMake точно нашел библиотеку трекинга
 find_package(OpenCV REQUIRED COMPONENTS core imgproc video tracking)
 add_subdirectory(deps/reflect-cpp)
+
+set(HTTPLIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/deps/cpp-httplib/httplib.h")
+if(NOT EXISTS "${HTTPLIB_PATH}")
+    file(DOWNLOAD "https://raw.githubusercontent.com/yhirose/cpp-httplib/refs/heads/master/httplib.h" "${HTTPLIB_PATH}")
+endif()
 # --- 3. Определение исходников ---
 file(GLOB_RECURSE SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
 # --- 4. Создание исполняемого файла ---
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
+target_precompile_headers(${PROJECT_NAME} PRIVATE deps/cpp-httplib/httplib.h)
+
 # --- 5. Настройка параметров таргета (инклуды и опции) ---
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${OpenCV_INCLUDE_DIRS}
-        ${PROJECT_SOURC_DIR}/deps/cpp-httplib/
+        ${PROJECT_SOURCE_DIR}/deps/cpp-httplib/
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE

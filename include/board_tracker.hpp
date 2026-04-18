@@ -30,7 +30,8 @@ private:
     // Теперь методы работают с DetectedBoard, а не с Rect!
     void matchDetectionsToTracks(const cv::Mat& frame,
                                  const std::vector<DetectedBoard>& detections,
-                                 std::vector<bool>& matched);
+                                 std::vector<bool>& matched,
+                                 std::unordered_set<int>& toRemove);
     void createNewTrack(const cv::Mat& frame, const DetectedBoard& board);
     void countBoards();
     void cleanupLostTracks();
@@ -38,7 +39,6 @@ private:
     float computeIoU(const cv::Rect& a, const cv::Rect& b) const;
 
     std::vector<BoardTrack> activeTracks_;
-    std::unordered_set<int> toRemove_;
 
     int nextId_ = 0;
     int totalCounted_ = 0;

@@ -31,7 +31,9 @@ public:
     int getSecondsSinceLastMotion() const;
 
     InspectionSystemConfig cfg;
-    void syncConfigs();
+    AppConfig loadConfig();
+    void applyConfig(const AppConfig& config);
+    AppConfig getConfig() const;
 
 private:
     bool isInAnalysisZone(const BoardTrack& track) const;

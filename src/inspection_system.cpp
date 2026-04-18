@@ -1,5 +1,4 @@
 #include "inspection_system.hpp"
-#include <iostream>
 
 InspectionSystem::InspectionSystem() {
     stats_.lastMotionTime = std::chrono::steady_clock::now();
@@ -10,7 +9,7 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
     
     std::vector<DetectedBoard> detections;
     if (frameCount_ % cfg.detectInterval_ == 0) {
-        auto detections = detector_.detect(frame);
+        detections = detector_.detect(frame);
         tracker_.update(frame, detections);
     } else {
 
@@ -125,9 +124,24 @@ int InspectionSystem::getSecondsSinceLastMotion() const {
     return static_cast<int>(elapsed.count());
 }
 
-void InspectionSystem::syncConfigs() {
-    ConfigManager::sync(cfg);
-    ConfigManager::sync(detector_.cfg);
-    ConfigManager::sync(tracker_.cfg);
-    ConfigManager::sync(analyzer_.cfg);
+AppConfig InspectionSystem::loadConfig()
+{
+    AppConfig config{cfg, detector_.cfg, tracker_.cfg, analyzer_.cfg};
+    ConfigManager::load(config);
+    applyConfig(config);
+    ConfigManager::save(config);
+    return config;
+}
+
+AppConfig InspectionSystem::getConfig() const
+{
+    return AppConfig{cfg, detector_.cfg, tracker_.cfg, analyzer_.cfg};
+}
+
+void InspectionSystem::applyConfig(const AppConfig& config)
+{
+    cfg               = config.inspectionSystemConfig;
+    detector_.cfg     = config.boardDetectorConfig;
+    tracker_.cfg      = config.boardTrackerConfig;
+    analyzer_.cfg     = config.boardAnalyzerConfig;
 }

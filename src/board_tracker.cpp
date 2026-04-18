@@ -27,10 +27,11 @@ void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>
     // 2. Если в этом кадре отработал Детектор, матчим его результаты с треками
     if (!detections.empty()) {
         std::vector<bool> detectionMatched(detections.size(), false);
-        matchDetectionsToTracks(frame, detections, detectionMatched);
+        std::unordered_set<int> toRemove;
+        matchDetectionsToTracks(frame, detections, detectionMatched, toRemove);
         activeTracks_.erase(
         std::remove_if(activeTracks_.begin(), activeTracks_.end(),
-            [&](const BoardTrack& t) { return toRemove_.count(t.id); }),
+            [&](const BoardTrack& t) { return toRemove.count(t.id); }),
         activeTracks_.end()
        );
         // 3. Создаём новые треки для детекций, которые ни с кем не совпали
@@ -52,7 +53,8 @@ void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>
 
 void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
                                            const std::vector<DetectedBoard>& detections,
-                                           std::vector<bool>& matched) {
+                                           std::vector<bool>& matched,
+                                           std::unordered_set<int>& toRemove) {
     for (auto& track : activeTracks_) {
         if (track.framesLost > cfg.maxFramesLost_)
         {
@@ -96,7 +98,7 @@ void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
                 if (other.id != track.id &&
                     computeIoU(other.getBoundingBox(), track.getBoundingBox()) > cfg.minIouMatch_)
                     {
-                        toRemove_.insert(other.id);
+                        toRemove.insert(other.id);
                     }
             }
         }

@@ -3,6 +3,7 @@
 #include <cfloat>
 #include <climits>
 
+
 struct BoardTrackerConfig
 {
     float minIouMatch_ = 0.3f;
@@ -39,4 +40,12 @@ struct BoardAnalyzerConfig
     float gradeA_maxDefectRatio_ = 0.05f;
     float gradeB_minLightness_ = 60.0f;
     float gradeB_maxDefectRatio_ = 0.15f;
+};
+
+struct AppConfig
+{
+    InspectionSystemConfig inspectionSystemConfig;
+    BoardDetectorConfig boardDetectorConfig;
+    BoardTrackerConfig boardTrackerConfig;
+    BoardAnalyzerConfig boardAnalyzerConfig;
 };

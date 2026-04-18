@@ -1,4 +1,4 @@
-#include "../include/board_analyzer.hpp"
+#include "board_analyzer.hpp"
 
 BoardAnalyzer::BoardAnalyzer() = default;
 

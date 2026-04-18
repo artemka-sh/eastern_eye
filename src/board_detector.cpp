@@ -1,6 +1,7 @@
 #include "board_detector.hpp"
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 #include <cmath>
-#include <iostream>
 #include <print>
 
 BoardDetector::BoardDetector() {
@@ -13,7 +14,7 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
 
     // 1. Защита от пустых/битых кадров камеры
     if (frame.empty() || frame.cols <= 10 || frame.rows <= 10) {
-        std::cerr << "Предупреждение: получен пустой или битый кадр!" << std::endl;
+        std::println(stderr, "Предупреждение: получен пустой или битый кадр!");
         return {};
     }
 
