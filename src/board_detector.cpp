@@ -27,7 +27,7 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
 
     // channels[1] - это канал 'a'. Всё, что зеленее нейтрали, отсекается.
     // Если доски не выделяются, поиграйся с labAThreshold_ (по умолчанию 130)
-    cv::threshold(channels[1], mask, labAThreshold_, 255, cv::THRESH_BINARY);
+    cv::threshold(channels[1], mask, cfg.labAThreshold_, 255, cv::THRESH_BINARY);
 
     // 2. МОРФОЛОГИЯ ДЛЯ ОЧИСТКИ ШУМА
     cv::morphologyEx(mask, mask, cv::MORPH_OPEN, morphKernel_);
@@ -46,7 +46,7 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
         double area = cv::contourArea(contour);
         double relativeArea = area / (frame.cols * frame.rows);
         // Фильтр по площади
-        if (relativeArea < minRelativeArea_ || area > maxRelativeArea_) continue;
+        if (relativeArea < cfg.minRelativeArea_ || area > cfg.maxRelativeArea_) continue;
 
         // Получаем повернутый прямоугольник
         cv::RotatedRect rBox = cv::minAreaRect(contour);
@@ -57,10 +57,10 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
         float h = rBox.size.height;
         float aspectRatio = (w > h) ? (w / h) : (h / w);
 
-        if (aspectRatio < minAspectRatio_ || aspectRatio > maxAspectRatio_) continue;
+        if (aspectRatio < cfg.minAspectRatio_ || aspectRatio > cfg.maxAspectRatio_) continue;
 
         // Фильтр по позиции на конвейере
-        if (rBox.center.y < minY_ || rBox.center.y > maxY_) continue;
+        if (rBox.center.y < cfg.minY_ || rBox.center.y > cfg.maxY_) continue;
 
         // --- НАЧИНАЕТСЯ ВЫЧИСЛЕНИЕ ТОЧНОЙ ГЕОМЕТРИИ ---
         DetectedBoard board;

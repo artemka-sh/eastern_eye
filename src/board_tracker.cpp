@@ -54,7 +54,7 @@ void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
                                            const std::vector<DetectedBoard>& detections,
                                            std::vector<bool>& matched) {
     for (auto& track : activeTracks_) {
-        if (track.framesLost > maxFramesLost_)
+        if (track.framesLost > cfg.maxFramesLost_)
         {
             std::print("Максимальное количество кадров превышено {}", track.id);
         }
@@ -70,10 +70,16 @@ void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
             cv::Rect detBbox = detections[i].rBox.boundingRect();
             float iou = computeIoU(trackBbox, detBbox);
 
-            if (iou > bestIoU && iou > minIouMatch_) {
+            if (iou > bestIoU && iou > cfg.minIouMatch_) {
                 bestIoU = iou;
                 bestIdx = static_cast<int>(i);
             }
+        }
+
+        // Детектор прогнался и не нашёл этот трек — считаем потерей
+        if (bestIdx < 0) {
+            track.framesLost++;
+            continue;
         }
 
         // БИНГО! Мы сопоставили трек и свежую детекцию
@@ -88,7 +94,7 @@ void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
             for (const auto& other : activeTracks_)
             {
                 if (other.id != track.id &&
-                    computeIoU(other.getBoundingBox(), track.getBoundingBox()) > minIouMatch_)
+                    computeIoU(other.getBoundingBox(), track.getBoundingBox()) > cfg.minIouMatch_)
                     {
                         toRemove_.insert(other.id);
                     }
@@ -114,8 +120,8 @@ void BoardTracker::countBoards() {
     for (auto& track : activeTracks_) {
         // Заменили track.centroid.x на track.getCentroid().x
         if (!track.counted &&
-            track.getCentroid().x > countLineX_ && track.getCentroid().y > countLineY_ &&
-            track.framesSeen > minFramesStable_ &&
+            track.getCentroid().x > cfg.countLineX_ && track.getCentroid().y > cfg.countLineY_ &&
+            track.framesSeen > cfg.minFramesStable_ &&
             track.framesLost == 0) {
 
             track.counted = true;
@@ -129,7 +135,7 @@ void BoardTracker::cleanupLostTracks() {
         std::remove_if(activeTracks_.begin(), activeTracks_.end(),
             [this](const BoardTrack& t) {
                 //удалить если потерян долго или слишком близко к верху (куда уходят доски)
-                return t.framesLost > maxFramesLost_ || t.getBoundingBox().y + t.getBoundingBox().height/3 < 0  + 100;
+                return t.framesLost > cfg.maxFramesLost_ || t.getBoundingBox().y + t.getBoundingBox().height/3 < 0  + 100;
             }),
         activeTracks_.end()
     );

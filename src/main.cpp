@@ -3,6 +3,8 @@
 #include <opencv2/videoio.hpp>
 #include <iostream>
 
+
+
 void onMainWindowTrakbarSlide(int pos , void* cap)
 {
     cv::VideoCapture* _cap = static_cast<cv::VideoCapture*>(cap);
@@ -35,8 +37,13 @@ int main(int argc, char** argv)
     //     cv::createTrackbar("Position", "Original", &g_slider_position, frames, onMainWindowTrakbarSlide, &cap);
     //     cv::createTrackbar("Speed", "Original", &speed, 8, onMainWindowSpeedTrakbarSlide, {});
     // }catch (std::exception &e){std::cerr << "Трекер не удалось создать: " << e.what() << std::endl;}
+    std::println("Оптимизация процессора IPP статус: {}", cv::ipp::useIPP());
+
     // Инициализация системы
     InspectionSystem system;
+    system.syncConfigs();
+    BoardTracker tracker_;
+    BoardAnalyzer analyzer_;
 
     // Настройки под конвейер (можно менять)
     system.setAnalysisZone(0, INT_MAX, 0 , INT_MAX);
@@ -62,7 +69,13 @@ int main(int argc, char** argv)
             goto keychek;
         }
 
-        cap >> frame; if (frame.empty()) break;
+        cap >> frame;
+        if (frame.empty())
+        {
+            std::cerr << "Signal lost, retrying..." << std::endl;
+            cap.open(videoPath);
+            goto keychek;
+        }
         try
         {
             int current_pos = (int)cap.get(cv::CAP_PROP_POS_FRAMES);

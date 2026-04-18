@@ -9,7 +9,7 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
     frameCount_++;
     
     std::vector<DetectedBoard> detections;
-    if (frameCount_ % detectInterval_ == 0) {
+    if (frameCount_ % cfg.detectInterval_ == 0) {
         auto detections = detector_.detect(frame);
         tracker_.update(frame, detections);
     } else {
@@ -45,8 +45,8 @@ void InspectionSystem::draw(cv::Mat& frame) const {
     // Рисуем зону анализа
     // TODO рисовать - не значит исползовать.
     cv::rectangle(frame, 
-                 cv::Point(analysisZoneXMin_, analysisZoneYMin_),
-                 cv::Point(analysisZoneXMax_, analysisZoneYMax_),
+                 cv::Point(cfg.analysisZoneXMin_, cfg.analysisZoneYMin_),
+                 cv::Point(cfg.analysisZoneXMax_, cfg.analysisZoneYMax_),
                  cv::Scalar(Color::CYAN), 2);
     
     // Рисуем треки
@@ -111,16 +111,23 @@ void InspectionSystem::draw(cv::Mat& frame) const {
 }
 
 bool InspectionSystem::isInAnalysisZone(const BoardTrack& track) const {
-    return track.getCentroid().x >= analysisZoneXMin_ &&
-           track.getCentroid().x <= analysisZoneXMax_;
+    return track.getCentroid().x >= cfg.analysisZoneXMin_ &&
+           track.getCentroid().x <= cfg.analysisZoneXMax_;
 }
 
 bool InspectionSystem::isLineStopped() const {
-    return getSecondsSinceLastMotion() > lineStopThresholdSec_;
+    return getSecondsSinceLastMotion() > cfg.lineStopThresholdSec_;
 }
 
 int InspectionSystem::getSecondsSinceLastMotion() const {
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - stats_.lastMotionTime);
     return static_cast<int>(elapsed.count());
+}
+
+void InspectionSystem::syncConfigs() {
+    ConfigManager::sync(cfg);
+    ConfigManager::sync(detector_.cfg);
+    ConfigManager::sync(tracker_.cfg);
+    ConfigManager::sync(analyzer_.cfg);
 }

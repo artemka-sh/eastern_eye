@@ -6,8 +6,10 @@
 #include <memory>
 #include <opencv2/video/tracking.hpp>
 #include <opencv2/tracking.hpp>
+#include "system_configuration.hpp"
 
-class BoardTracker {
+class BoardTracker
+{
 public:
     BoardTracker();
 
@@ -19,8 +21,10 @@ public:
 
     int getTotalCounted() const { return totalCounted_; }
 
-    void setCountLineX(int x) { countLineX_ = x; }
-    void setMinFramesStable(int frames) { minFramesStable_ = frames; }
+    void setCountLineX(int x) { cfg.countLineX_ = x; }
+    void setMinFramesStable(int frames) { cfg.minFramesStable_ = frames; }
+
+    BoardTrackerConfig cfg;
 
 private:
     // Теперь методы работают с DetectedBoard, а не с Rect!
@@ -38,10 +42,4 @@ private:
 
     int nextId_ = 0;
     int totalCounted_ = 0;
-
-    float minIouMatch_ = 0.3f;
-    int maxFramesLost_ = 15;
-    int countLineX_ = 0;
-    int countLineY_ = 0;
-    int minFramesStable_ = 5;
 };

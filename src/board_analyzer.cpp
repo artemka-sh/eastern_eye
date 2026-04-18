@@ -81,9 +81,9 @@ std::string BoardAnalyzer::classifyBoard(const cv::Scalar& avgColor, float defec
     float lightness = avgColor[0];  // L в LAB (0-100)
     
     // Классификация по стандартам предприятия
-    if (lightness >= rules_.gradeA_minLightness && defectRatio <= rules_.gradeA_maxDefectRatio) {
+    if (lightness >= cfg.gradeA_minLightness_ && defectRatio <= cfg.gradeA_maxDefectRatio_) {
         return "Grade_A";
-    } else if (lightness >= rules_.gradeB_minLightness && defectRatio <= rules_.gradeB_maxDefectRatio) {
+    } else if (lightness >= cfg.gradeB_minLightness_ && defectRatio <= cfg.gradeB_maxDefectRatio_) {
         return "Grade_B";
     } else {
         return "Grade_C";

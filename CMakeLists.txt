@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 4.0) # C++23 требует минимум 3.20+,
 project(eastern_eye VERSION 1.0)
 
 # --- 1. Глобальные настройки проекта ---
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -16,7 +16,7 @@ endif()
 # --- 2. Поиск зависимостей ---
 # Добавляем COMPONENTS, чтобы CMake точно нашел библиотеку трекинга
 find_package(OpenCV REQUIRED COMPONENTS core imgproc video tracking)
-
+add_subdirectory(deps/reflect-cpp)
 # --- 3. Определение исходников ---
 file(GLOB_RECURSE SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
@@ -27,6 +27,7 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${OpenCV_INCLUDE_DIRS}
+        ${PROJECT_SOURC_DIR}/deps/cpp-httplib/
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
@@ -42,4 +43,4 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 
 # --- 6. Линковка библиотек ---
 # Переменная ${OpenCV_LIBS} уже содержит все найденные компоненты (включая tracking)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBS} reflectcpp)

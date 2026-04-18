@@ -1,1 +1,2 @@
  find . -path ./cmake-build-debug -prune -o \( -name "*.cpp" -o -name "*.hpp" \) -type f -exec tail -n +1 {} + | xclip -selection clipboard
+find . \( -name "cmake-build-debug" -o -name "deps" \) -prune -o \( -name "*.cpp" -o -name "*.hpp" \) -type f -exec tail -n +1 {} + | xclip -selection clipboard
