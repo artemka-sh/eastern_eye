@@ -17,16 +17,9 @@ public:
     void draw(cv::Mat& frame) const;
 
     const SystemStats& getStats() const { return stats_; }
-
-    // Настройки зоны анализа
-    void setAnalysisZone(int xMin = 0, int xMax = 0, int yMin = 0, int yMax = 0)
-    {
-        cfg.analysisZoneXMin_ = xMin;  cfg.analysisZoneXMax_ = xMax;
-        cfg.analysisZoneYMin_ = yMin;  cfg.analysisZoneYMax_ = yMax;
-    }
+    StatsSnapshot getStatsSnapshot() const;
 
     // Мониторинг остановки линии
-    void setLineStopThreshold(int seconds) { cfg.lineStopThresholdSec_ = seconds; }
     bool isLineStopped() const;
     int getSecondsSinceLastMotion() const;
 
@@ -36,8 +29,6 @@ public:
     AppConfig getConfig() const;
 
 private:
-    bool isInAnalysisZone(const BoardTrack& track) const;
-
     BoardDetector detector_;
     BoardTracker tracker_;
     BoardAnalyzer analyzer_;

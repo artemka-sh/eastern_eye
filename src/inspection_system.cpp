@@ -1,4 +1,5 @@
 #include "inspection_system.hpp"
+#include <algorithm>
 
 InspectionSystem::InspectionSystem() {
     stats_.lastMotionTime = std::chrono::steady_clock::now();
@@ -21,15 +22,15 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
         stats_.lastMotionTime = std::chrono::steady_clock::now();
     }
 
-    // Анализ досок в зоне анализа
-    for (auto& track : tracker_.getActiveTracks()) {
-        if (isInAnalysisZone(track) && !track.analyzed) {
+    // Анализ досок (детектор уже отфильтровал по позиции на конвейере)
+    for (auto& track : tracker_.getActiveTracks())
+    {
+        if (!track.analyzed)
+        {
             analyzer_.analyze(frame, track);
 
-            // Обновляем статистику категорий только для посчитанных
-            if (track.counted) {
+            if (track.counted)
                 stats_.categoryCounts[track.category]++;
-            }
         }
     }
 
@@ -40,13 +41,14 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
 }
 
 void InspectionSystem::draw(cv::Mat& frame) const {
-    
-    // Рисуем зону анализа
-    // TODO рисовать - не значит исползовать.
-    cv::rectangle(frame, 
-                 cv::Point(cfg.analysisZoneXMin_, cfg.analysisZoneYMin_),
-                 cv::Point(cfg.analysisZoneXMax_, cfg.analysisZoneYMax_),
-                 cv::Scalar(Color::CYAN), 2);
+
+    // Рисуем позицию конвейера (параметры живут в детекторе)
+    const auto& dcfg = detector_.cfg;
+    int x1 = std::clamp(dcfg.minX_, 0, frame.cols);
+    int y1 = std::clamp(dcfg.minY_, 0, frame.rows);
+    int x2 = std::clamp(dcfg.maxX_, 0, frame.cols);
+    int y2 = std::clamp(dcfg.maxY_, 0, frame.rows);
+    cv::rectangle(frame, {x1, y1}, {x2, y2}, cv::Scalar(Color::CYAN), 2);
     
     // Рисуем треки
     for (const auto& track : tracker_.getActiveTracks()) {
@@ -109,9 +111,16 @@ void InspectionSystem::draw(cv::Mat& frame) const {
     }
 }
 
-bool InspectionSystem::isInAnalysisZone(const BoardTrack& track) const {
-    return track.getCentroid().x >= cfg.analysisZoneXMin_ &&
-           track.getCentroid().x <= cfg.analysisZoneXMax_;
+StatsSnapshot InspectionSystem::getStatsSnapshot() const
+{
+    return {
+        .totalCounted       = stats_.totalCounted,
+        .totalDetected      = stats_.totalDetected,
+        .activeTracks       = static_cast<int>(tracker_.getActiveTracks().size()),
+        .secondsSinceMotion = getSecondsSinceLastMotion(),
+        .lineStopped        = isLineStopped(),
+        .categoryCounts     = stats_.categoryCounts,
+    };
 }
 
 bool InspectionSystem::isLineStopped() const {

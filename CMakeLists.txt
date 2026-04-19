@@ -50,3 +50,9 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 # --- 6. Линковка библиотек ---
 # Переменная ${OpenCV_LIBS} уже содержит все найденные компоненты (включая tracking)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBS} reflectcpp)
+
+# --- 6. Создание симлинков для build-а ---
+execute_process(
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+        ${CMAKE_SOURCE_DIR}/res ${CMAKE_BINARY_DIR}/res
+)

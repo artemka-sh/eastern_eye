@@ -19,6 +19,8 @@ struct BoardDetectorConfig
     double maxRelativeArea_ = DBL_MAX;
     float minAspectRatio_ = 0;
     float maxAspectRatio_ = FLT_MAX;
+    int minX_ = 0;
+    int maxX_ = INT_MAX;
     int minY_ = 0;
     int maxY_ = INT_MAX;
     int labAThreshold_ = 130;
@@ -27,10 +29,6 @@ struct BoardDetectorConfig
 struct InspectionSystemConfig
 {
     int detectInterval_ = 1;
-    int analysisZoneXMin_ = 0;
-    int analysisZoneXMax_ = 0;
-    int analysisZoneYMin_ = 0;
-    int analysisZoneYMax_ = 0;
     int lineStopThresholdSec_ = 60;
 };
 

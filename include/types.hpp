@@ -56,13 +56,24 @@ struct SystemStats {
     int totalCounted = 0;
     std::map<std::string, int> categoryCounts;
     std::chrono::steady_clock::time_point lastMotionTime;
-    
+
     void reset() {
         totalDetected = 0;
         totalCounted = 0;
         categoryCounts.clear();
         lastMotionTime = std::chrono::steady_clock::now();
     }
+};
+
+// Снимок статистики для сериализации (без chrono)
+struct StatsSnapshot
+{
+    int totalCounted = 0;
+    int totalDetected = 0;
+    int activeTracks = 0;
+    int secondsSinceMotion = 0;
+    bool lineStopped = false;
+    std::map<std::string, int> categoryCounts;
 };
 
 namespace Color {

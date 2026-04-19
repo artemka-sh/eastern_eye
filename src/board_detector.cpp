@@ -40,7 +40,6 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
     // 3. ПОИСК КОНТУРОВ
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
-    std::print("contours: {}", contours.size()); std::fflush(stdout);
 
     // 4. АНАЛИЗ КАЖДОЙ ДОСКИ
     for (const auto& contour : contours) {
@@ -61,6 +60,7 @@ std::vector<DetectedBoard> BoardDetector::detect(const cv::Mat& frame) {
         if (aspectRatio < cfg.minAspectRatio_ || aspectRatio > cfg.maxAspectRatio_) continue;
 
         // Фильтр по позиции на конвейере
+        if (rBox.center.x < cfg.minX_ || rBox.center.x > cfg.maxX_) continue;
         if (rBox.center.y < cfg.minY_ || rBox.center.y > cfg.maxY_) continue;
 
         // --- НАЧИНАЕТСЯ ВЫЧИСЛЕНИЕ ТОЧНОЙ ГЕОМЕТРИИ ---

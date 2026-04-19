@@ -3,10 +3,21 @@
 #include "main_ui.hpp"
 #include <opencv2/highgui.hpp>
 #include <opencv2/videoio.hpp>
+#include <csignal>
+#include <atomic>
 #include <print>
+
+std::atomic<bool> keepRunning(true);
+
+void signalHandler(int signum) {
+    std::println("\n[!] Перехвачен сигнал {}  (Ctrl+C) или kill. Завершаем работу...", signum);
+    keepRunning = false;
+}
 
 int main(int argc, char** argv)
 {
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
     std::string videoPath = argc > 1 ? argv[1] : "/dev/video10";
     std::println("IPP: {}", cv::ipp::useIPP());
 
@@ -19,18 +30,12 @@ int main(int argc, char** argv)
     SharedState state;
     DashboardServer server(state,
         [&system]{ return system.getConfig(); },
-        [&system](const AppConfig& cfg){ system.applyConfig(cfg); }
+        [&system](const AppConfig& cfg){ system.applyConfig(cfg); },
+        [&system]{ return system.getStatsSnapshot(); }
     );
     server.start();
-    system.setAnalysisZone(0, INT_MAX, 0, INT_MAX);
-    system.setLineStopThreshold(60);
 
     cv::VideoCapture cap(videoPath);
-    if (!cap.isOpened())
-    {
-        std::println(stderr, "Не удалось открыть видео: {}", videoPath);
-        return -1;
-    }
 
     int speed = 1;
     setupTrackbars(cap, speed);
@@ -40,7 +45,7 @@ int main(int argc, char** argv)
     bool paused = false;
     int frameNum = 0;
 
-    while (true)
+    while (keepRunning)
     {
         if (paused)
         {
@@ -51,8 +56,9 @@ int main(int argc, char** argv)
         cap >> frame;
         if (frame.empty())
         {
-            std::println(stderr, "Сигнал потерян, переподключение...");
+            std::println(stderr, "Попытка подключения сигнала...");
             cap.open(videoPath);
+            std::println("Резульат: {}", cap.isOpened() ? "видео кажется появилось" : "безрезультатно");
             goto keychek;
         }
 
@@ -66,8 +72,6 @@ int main(int argc, char** argv)
             cv::imshow("Original", frame);
         }
 
-        if (frameNum % 10 == 0)
-            printFrameStats(frameNum, system.getStats(), system.isLineStopped());
 
         keychek:
         char key = cv::waitKey(paused ? 0 : 30);
@@ -75,6 +79,10 @@ int main(int argc, char** argv)
         if (key == 27)
         {
             break;
+        }
+        else if (key == 'i' || key == 'I')
+        {
+            printFrameStats(frameNum, system.getStats(), system.isLineStopped());
         }
         else if (key == ' ')
         {
@@ -98,7 +106,7 @@ int main(int argc, char** argv)
         std::println("{}: {} ({:.1f}%)", cat, count, pct);
     }
 
-    server.stop();
+
     cap.release();
     cv::destroyAllWindows();
     cv::waitKey(1);
