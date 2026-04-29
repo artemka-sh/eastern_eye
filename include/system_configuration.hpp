@@ -34,6 +34,16 @@ struct InspectionSystemConfig
 
 struct BoardAnalyzerConfig
 {
+    float INPUT_WIDTH = 640.0;
+    float INPUT_HEIGHT = 640.0;
+    float SCORE_THRESHOLD = 0.5;
+    float NMS_THRESHOLD = 0.45;
+    float CONFIDENCE_THRESHOLD = 0.45;
+
+    //text
+    float FONT_SCALE = 0.7;
+    int THICKNESS = 1;
+
     float gradeA_minLightness_ = 70.0f;
     float gradeA_maxDefectRatio_ = 0.05f;
     float gradeB_minLightness_ = 60.0f;

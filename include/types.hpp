@@ -76,7 +76,16 @@ struct StatsSnapshot
     std::map<std::string, int> categoryCounts;
 };
 
+struct LetterboxInfo
+{
+    float scale = 1.0f;
+    int   padX  = 0;
+    int   padY  = 0;
+};
+
+
 namespace Color {
+    const cv::Scalar BLACK  = {0, 0, 0};
     const cv::Scalar RED    = {0, 0, 255};
     const cv::Scalar GREEN  = {0, 255, 0};
     const cv::Scalar BLUE   = {255, 0, 0};
