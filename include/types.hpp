@@ -12,7 +12,7 @@
 struct Defect {
     cv::Rect bbox;
     float severity;  // 0.0-1.0
-    std::string type;
+    int classIdx;
 };
 
 // Геометрия (Физическое состояние в конкретный момент)
@@ -92,4 +92,10 @@ namespace Color {
     const cv::Scalar YELLOW = {0, 255, 255};
     const cv::Scalar CYAN   = {255, 255, 0};
     const cv::Scalar ORANGE = cv::Scalar(0, 165, 255);
+}
+
+//хелпер для первода массива из system_configuration
+inline cv::Scalar toScalar(const std::array<int, 3>& c) noexcept
+{
+    return cv::Scalar(c[0], c[1], c[2]);
 }

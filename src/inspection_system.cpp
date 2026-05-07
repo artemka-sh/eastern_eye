@@ -9,7 +9,8 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
     frameCount_++;
     
     std::vector<DetectedBoard> detections;
-    if (frameCount_ % cfg.detectInterval_ == 0) {
+    bool qualityDetectMoment = frameCount_ % cfg.detectInterval_ == 0;
+    if (qualityDetectMoment) {
         detections = detector_.detect(frame);
         tracker_.update(frame, detections);
     } else {
@@ -26,7 +27,8 @@ void InspectionSystem::processFrame(const cv::Mat& frame) {
     for (auto& track : tracker_.getActiveTracks())
     {
         if (!track.analyzed)
-        {
+        if (qualityDetectMoment && track.geometry.rBox.center.y < frame.rows / 2)
+        { // посередине+-
             analyzer_.analyze(frame, track);
 
             if (track.counted)

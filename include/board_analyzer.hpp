@@ -14,6 +14,7 @@ public:
 
     void setRules(const BoardAnalyzerConfig& rules) { cfg = rules; }
     cv::Mat getROImatrix(const cv::RotatedRect& rBox, const cv::Mat& frame) const noexcept;
+    cv::Mat getROImask(cv::Mat& boardROI) const noexcept;
 
     BoardAnalyzerConfig cfg;
 

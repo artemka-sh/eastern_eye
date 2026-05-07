@@ -16,39 +16,57 @@ void BoardAnalyzer::analyze(const cv::Mat& frame, BoardTrack& track)
 
     cv::RotatedRect& rBox = track.geometry.rBox;
     cv::Mat boardROI = getROImatrix(rBox, frame);
+    cv::Mat maskROI = getROImask(boardROI);
     cv::imshow("Board ROI", boardROI);
+    cv::imshow("ROI mask", maskROI);
 
-    // Анализ цвета
-    // track.avgColor = analyzeColor(boardROI);
 
-    // Детекция дефектов
+    track.avgColor = analyzeColor(boardROI);
+
     track.defects = detectDefects(boardROI);
 
-    cv::Mat debugView = boardROI.clone();
-    drawDefects(debugView, track.defects);
-    cv::imshow("Board defects", debugView);
-
-    // // Подсчёт соотношения дефектов
-    // int defectPixels = 0;
-    // for (const auto& defect : track.defects) {
-    //     defectPixels += defect.bbox.area();
-    // }
-    // track.defectRatio = static_cast<float>(defectPixels) / (boardROI.cols * boardROI.rows);
-
-    // // Классификация
     // track.category = classifyBoard(track.avgColor, track.defectRatio);
+
+
+    drawDefects(boardROI, track.defects);
+    cv::imshow("Board defects", boardROI);
 
     track.analyzed = true;
 }
 
 cv::Mat BoardAnalyzer::getROImatrix(const cv::RotatedRect& rBox, const cv::Mat& frame) const noexcept
 {
-    cv::Mat M = cv::getRotationMatrix2D(rBox.center, rBox.angle, 1.0);
-    cv::Mat rotated;
-    cv::warpAffine(frame, rotated, M, frame.size(), cv::INTER_LINEAR);
+    const cv::Size dst(static_cast<int>(std::round(rBox.size.width)),
+                       static_cast<int>(std::round(rBox.size.height)));
+
+
+    cv::Mat warpingData = cv::getRotationMatrix2D(rBox.center, rBox.angle, 1.0);
+    //после нужно сдвинуть изображение в центр новой матрицы, перенести в другую систему координат
+    warpingData.at<double>(0, 2) += dst.width  * 0.5 - rBox.center.x;
+    warpingData.at<double>(1, 2) += dst.height * 0.5 - rBox.center.y;
+
     cv::Mat board;
-    cv::getRectSubPix(rotated, rBox.size, rBox.center, board);
+    cv::warpAffine(frame, board, warpingData, dst, cv::INTER_LINEAR,
+                   cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
+
+    if (board.size().width > board.size().height) // вернуть в исходное вертикальное полоежине после
+        cv::rotate(board, board, cv::ROTATE_90_COUNTERCLOCKWISE);
     return board;
+}
+
+inline cv::Mat BoardAnalyzer::getROImask(cv::Mat &boardROI) const noexcept
+{
+    cv::Mat hsv, greenMask, boardMask;
+    cv::cvtColor(boardROI, hsv, cv::COLOR_BGR2HSV);
+
+    cv::inRange(hsv,
+        cv::Scalar(cfg.chromakeyMin_H_S_V[0], cfg.chromakeyMin_H_S_V[1], cfg.chromakeyMin_H_S_V[2]),
+        cv::Scalar(cfg.chromakeyMax_H_S_V[0], cfg.chromakeyMax_H_S_V[1], cfg.chromakeyMax_H_S_V[2]),
+        greenMask);
+
+    // теперь маска НЕ-зелёных пикселей (то есть доска)
+    cv::bitwise_not(greenMask, boardMask);
+    return boardMask;
 }
 
 std::vector<Defect> BoardAnalyzer::detectDefects(const cv::Mat& boardROI)
@@ -72,12 +90,12 @@ cv::Mat BoardAnalyzer::preprocess(const cv::Mat& boardROI, LetterboxInfo& info) 
 {
     // Letterbox = ресайз с сохранением соотношения сторон + паддинг серым (114).
     // Без него на не-квадратных кропах боксы поплывут.
-    const int netSize = static_cast<int>(cfg.INPUT_WIDTH);
+    const int netSize = static_cast<int>(cfg.INPUT_SIZE); //используется и INPUT_SIZE, что удобнее
     const int srcW = boardROI.cols;
     const int srcH = boardROI.rows;
 
-    info.scale = std::min(static_cast<float>(netSize) / srcW,
-                          static_cast<float>(netSize) / srcH);
+    info.scale = std::min(cfg.INPUT_SIZE / srcW,
+                          cfg.INPUT_SIZE / srcH);
     const int newW = static_cast<int>(std::round(srcW * info.scale));
     const int newH = static_cast<int>(std::round(srcH * info.scale));
     info.padX = (netSize - newW) / 2;
@@ -100,8 +118,7 @@ cv::Mat BoardAnalyzer::preprocess(const cv::Mat& boardROI, LetterboxInfo& info) 
 std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Size roiSize,
                                                const LetterboxInfo& info) const
 {
-    // Форма выхода yolov8 detect: [1, 4+numClasses, N], где N=8400 для 640.
-    // Это ГЛАВНОЕ отличие от v5 (там было [1, N, 5+nc] и был objectness).
+    // Форма выхода yolov8 detect: [1, 4+numClasses, N], N=8400 для 640.
     if (rawOutput.dims != 3 || rawOutput.size[0] != 1)
         return {};
 
@@ -122,26 +139,21 @@ std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Siz
     confidences.reserve(rows / 8);
     boxes.reserve(rows / 8);
 
-    const float* data = reinterpret_cast<const float*>(out.data);
-    for (int i = 0; i < rows; ++i, data += dimensions)
+    for (int i = 0; i < out.rows; ++i)
     {
-        // У v8 нет objectness — confidence берём как максимум по классам.
-        const float* classScores = data + 4;
-        cv::Mat scores(1, numClasses, CV_32FC1, const_cast<float*>(classScores));
-        cv::Point classId;
-        double maxClassScore = 0.0;
-        cv::minMaxLoc(scores, nullptr, &maxClassScore, nullptr, &classId);
+        const float* row = out.ptr<float>(i);
+        std::span<const float> scores(row + 4, numClasses);
+
+        auto maxIt = std::ranges::max_element(scores);
+        const float maxClassScore = *maxIt;
 
         if (maxClassScore < cfg.SCORE_THRESHOLD)
             continue;
 
-        // cx, cy, w, h в пикселях входа сети (0..640), не нормированные.
-        // Обратное letterbox-преобразование: минус паддинг, делим на масштаб —
-        // получаем координаты в системе исходного boardROI.
-        const float cx = data[0];
-        const float cy = data[1];
-        const float w  = data[2];
-        const float h  = data[3];
+        const int classId = static_cast<int>(maxIt - scores.begin());
+
+        const float cx = row[0], cy = row[1], w = row[2], h = row[3];
+
         const float left = (cx - w * 0.5f - info.padX) / info.scale;
         const float top  = (cy - h * 0.5f - info.padY) / info.scale;
         const float boxW = w / info.scale;
@@ -149,8 +161,8 @@ std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Siz
 
         boxes.emplace_back(static_cast<int>(left), static_cast<int>(top),
                            static_cast<int>(boxW), static_cast<int>(boxH));
-        confidences.push_back(static_cast<float>(maxClassScore));
-        classIds.push_back(classId.x);
+        confidences.push_back(maxClassScore);
+        classIds.push_back(classId);
     }
 
     // Подавление немаксимумов (NMS — non-maximum suppression):
@@ -167,7 +179,7 @@ std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Siz
         Defect d;
         d.bbox     = boxes[idx] & roiBounds;
         d.severity = confidences[idx];
-        d.type     = std::to_string(classIds[idx]);
+        d.classIdx = classIds[idx];
         defects.push_back(std::move(d));
     }
     return defects;
@@ -195,8 +207,19 @@ void BoardAnalyzer::drawDefects(cv::Mat& image, const std::vector<Defect>& defec
 {
     for (const Defect& d : defects)
     {
-        cv::rectangle(image, d.bbox, Color::RED, cfg.THICKNESS * 2);
-        const std::string label = cv::format("%s: %.2f", d.type.c_str(), d.severity);
+        std::string name = "unknown";
+        cv::Scalar  color = Color::RED;
+
+        if (d.classIdx >= 0 &&
+            d.classIdx < static_cast<int>(cfg.defectClasses.size()))
+        {
+            const auto& cls = cfg.defectClasses[d.classIdx];
+            name  = cls.name;
+            color = toScalar(cls.colorBGR);
+        }
+
+        cv::rectangle(image, d.bbox, color, cfg.THICKNESS * 2);
+        const std::string label = cv::format("%s: %.2f", name.c_str(), d.severity);
         drawLabel(image, label, d.bbox.x, d.bbox.y);
     }
 }

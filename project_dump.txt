@@ -1,2 +1,7 @@
- find . -path ./cmake-build-debug -prune -o \( -name "*.cpp" -o -name "*.hpp" \) -type f -exec tail -n +1 {} + | xclip -selection clipboard
+find . -path ./cmake-build-debug -prune -o \( -name "*.cpp" -o -name "*.hpp" \) -type f -exec tail -n +1 {} + | xclip -selection clipboard
 find . \( -name "cmake-build-debug" -o -name "deps" \) -prune -o \( -name "*.cpp" -o -name "*.hpp" \) -type f -exec tail -n +1 {} + | xclip -selection clipboard
+
+
+find . \( -name "cmake-build-debug" -o -name "deps" \) -prune -o \( -name "*.cpp" -o -name "*.hpp" \) -type f -exec tail -n +1 {} + | tr '\n' ' ' | xclip -selection clipboard без переносов
+ ( for f in     src/dashboard_server.cpp include/dashboard_server.hpp     include/config_manager.hpp     src/board_detector.cpp include/board_detector.hpp     src/board_tracker.cpp include/board_tracker.hpp     src/board_analyzer.cpp include/board_analyzer.hpp     src/inspection_system.cpp include/inspection_system.hpp     src/main.cpp src/main_ui.cpp include/main_ui.hpp     include/types.hpp include/system_configuration.hpp;   do tail -v -n +1 "$f"; done ) | tr '\n' ' ' | xclip -selection clipboard
+в порядке диплома

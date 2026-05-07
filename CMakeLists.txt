@@ -27,8 +27,6 @@ file(GLOB_RECURSE SRC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 # --- 4. Создание исполняемого файла ---
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
-target_precompile_headers(${PROJECT_NAME} PRIVATE deps/cpp-httplib/httplib.h)
-
 # --- 5. Настройка параметров таргета (инклуды и опции) ---
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/include
