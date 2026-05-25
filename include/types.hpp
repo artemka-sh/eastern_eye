@@ -65,7 +65,7 @@ struct SystemStats {
     }
 };
 
-// Снимок статистики для сериализации (без chrono)
+// Снимок статистики для сериализации
 struct StatsSnapshot
 {
     int totalCounted = 0;
@@ -79,8 +79,17 @@ struct StatsSnapshot
 struct LetterboxInfo
 {
     float scale = 1.0f;
-    int   padX  = 0;
-    int   padY  = 0;
+    int padX  = 0;
+    int padY  = 0;
+    int y_offset = 0;
+};
+
+struct RawDetections
+{
+    std::vector<float>    confidences;
+    std::vector<cv::Rect> boxes;
+    std::vector<int>      classIds;
+    cv::Size              roiSize;
 };
 
 

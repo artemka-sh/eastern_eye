@@ -13,18 +13,20 @@ public:
     void analyze(const cv::Mat& frame, BoardTrack& track);
 
     void setRules(const BoardAnalyzerConfig& rules) { cfg = rules; }
-    cv::Mat getROImatrix(const cv::RotatedRect& rBox, const cv::Mat& frame) const noexcept;
-    cv::Mat getROImask(cv::Mat& boardROI) const noexcept;
 
     BoardAnalyzerConfig cfg;
 
 private:
     cv::Scalar analyzeColor(const cv::Mat& boardROI);
+    cv::Mat getROImatrix(const cv::RotatedRect& rBox, const cv::Mat& frame) const noexcept;
+    cv::Mat getROImask(cv::Mat& boardROI) const noexcept;
+    std::vector<std::pair<LetterboxInfo, cv::Mat>> getROISections(const cv::Mat& mat);
     std::vector<Defect> detectDefects(const cv::Mat& boardROI);
     std::string classifyBoard(const cv::Scalar& avgColor, float defectRatio);
     cv::Mat preprocess(const cv::Mat& boardROI, LetterboxInfo& info) const;
-    std::vector<Defect> postprocess(const cv::Mat& rawOutput, cv::Size roiSize,
-                                    const LetterboxInfo& info) const;
+    std::vector<Defect> getDefects_withRemoveBoxes(const RawDetections& raw) const;
+    RawDetections postprocess(const cv::Mat& rawOutput, cv::Size roiSize,
+                              const LetterboxInfo& info) const;
 
     void drawDefects(cv::Mat& image, const std::vector<Defect>& defects) const;
     void drawLabel(cv::Mat& image, const std::string& label, int left, int top) const;

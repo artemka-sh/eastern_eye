@@ -17,9 +17,9 @@ void BoardAnalyzer::analyze(const cv::Mat& frame, BoardTrack& track)
     cv::RotatedRect& rBox = track.geometry.rBox;
     cv::Mat boardROI = getROImatrix(rBox, frame);
     cv::Mat maskROI = getROImask(boardROI);
-    cv::imshow("Board ROI", boardROI);
-    cv::imshow("ROI mask", maskROI);
+    boardROI.setTo(cv::Scalar(0, 0, 0), maskROI);
 
+    cv::imshow("Board ROI", boardROI);
 
     track.avgColor = analyzeColor(boardROI);
 
@@ -56,7 +56,7 @@ cv::Mat BoardAnalyzer::getROImatrix(const cv::RotatedRect& rBox, const cv::Mat& 
 
 inline cv::Mat BoardAnalyzer::getROImask(cv::Mat &boardROI) const noexcept
 {
-    cv::Mat hsv, greenMask, boardMask;
+    cv::Mat hsv, greenMask;
     cv::cvtColor(boardROI, hsv, cv::COLOR_BGR2HSV);
 
     cv::inRange(hsv,
@@ -64,9 +64,40 @@ inline cv::Mat BoardAnalyzer::getROImask(cv::Mat &boardROI) const noexcept
         cv::Scalar(cfg.chromakeyMax_H_S_V[0], cfg.chromakeyMax_H_S_V[1], cfg.chromakeyMax_H_S_V[2]),
         greenMask);
 
-    // теперь маска НЕ-зелёных пикселей (то есть доска)
-    cv::bitwise_not(greenMask, boardMask);
-    return boardMask;
+    return greenMask;
+}
+
+std::vector<std::pair<LetterboxInfo, cv::Mat>> BoardAnalyzer::getROISections(const cv::Mat& boardROI)
+{
+    const int srcW = boardROI.cols;
+    const int srcH = boardROI.rows;
+    const int section_sizeXY = srcW;
+
+    // расчёт количества с учётом процента перекрытия
+    const int overlap = static_cast<int>(section_sizeXY * cfg.SECTION_OVERLAP_PERCENT);
+    const int step_initial = section_sizeXY - overlap;
+
+    int n = srcH / step_initial;
+    int mod = srcH % step_initial;
+    float remainder = static_cast<float>(mod) / step_initial;
+    if (remainder >= cfg.TOLERANCE_FOR_TILES) ++n;
+    n = std::max(1, n);
+
+    const int tile_h = (srcH + (n - 1) * overlap) / n;
+    const int step = tile_h - overlap;
+
+    std::vector<std::pair<LetterboxInfo, cv::Mat>> sections;
+    sections.reserve(n);
+    for (int i = 0; i < n; ++i)
+    {
+        int start_y = (i == n - 1) ? (srcH - tile_h) : (i * step);
+
+        LetterboxInfo meta;
+        meta.y_offset = start_y;
+        cv::Mat crop = boardROI(cv::Rect(0, start_y, srcW, tile_h));
+        sections.emplace_back(meta, crop);
+    }
+    return sections;
 }
 
 std::vector<Defect> BoardAnalyzer::detectDefects(const cv::Mat& boardROI)
@@ -74,16 +105,30 @@ std::vector<Defect> BoardAnalyzer::detectDefects(const cv::Mat& boardROI)
     if (boardROI.empty())
         return {};
 
-    LetterboxInfo info;
-    cv::Mat blob = preprocess(boardROI, info);
+    std::vector<std::pair<LetterboxInfo, cv::Mat>> sections = getROISections(boardROI);
+    //данные ниже собираются функцией постпроцессинга для того,
+    //чтобы потом сложить их и найти все дефекты разом функцией отчистки
+    RawDetections all;
+    all.roiSize = boardROI.size();
+    for (auto& section : sections)
+    {
+        LetterboxInfo& info = section.first;
+        cv::Mat& crop = section.second;
 
-    net.setInput(blob);
-    std::vector<cv::Mat> outputs;
-    net.forward(outputs, net.getUnconnectedOutLayersNames());
-    if (outputs.empty())
-        return {};
+        cv::Mat blob = preprocess(crop, info);
+        net.setInput(blob);
 
-    return postprocess(outputs[0], boardROI.size(), info);
+        std::vector<cv::Mat> outputs;
+        net.forward(outputs, net.getUnconnectedOutLayersNames());
+        if (outputs.empty() || outputs[0].empty())
+            continue;
+
+        RawDetections raw = postprocess(outputs[0], boardROI.size(), info);
+        all.confidences.append_range(raw.confidences);
+        all.boxes.append_range(raw.boxes);
+        all.classIds.append_range(raw.classIds);
+    }
+    return getDefects_withRemoveBoxes(all);
 }
 
 cv::Mat BoardAnalyzer::preprocess(const cv::Mat& boardROI, LetterboxInfo& info) const
@@ -102,7 +147,9 @@ cv::Mat BoardAnalyzer::preprocess(const cv::Mat& boardROI, LetterboxInfo& info) 
     info.padY = (netSize - newH) / 2;
 
     cv::Mat resized;
-    cv::resize(boardROI, resized, cv::Size(newW, newH));
+    // CUBIC при апскейле — резче тонкие трещины; AREA при даунскейле — без ореолов вокруг линий
+    const int interp = (info.scale >= 1.0f) ? cv::INTER_CUBIC : cv::INTER_AREA;
+    cv::resize(boardROI, resized, cv::Size(newW, newH), 0, 0, interp);
     cv::Mat letterboxed(netSize, netSize, boardROI.type(), cv::Scalar(114, 114, 114));
     resized.copyTo(letterboxed(cv::Rect(info.padX, info.padY, newW, newH)));
 
@@ -115,12 +162,13 @@ cv::Mat BoardAnalyzer::preprocess(const cv::Mat& boardROI, LetterboxInfo& info) 
     return blob;
 }
 
-std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Size roiSize,
-                                               const LetterboxInfo& info) const
+RawDetections BoardAnalyzer::postprocess(
+    const cv::Mat& rawOutput, cv::Size roiSize,
+    const LetterboxInfo& info) const
 {
     // Форма выхода yolov8 detect: [1, 4+numClasses, N], N=8400 для 640.
     if (rawOutput.dims != 3 || rawOutput.size[0] != 1)
-        return {};
+        throw std::string("фатальная ошибка - код не готов к нескольким изображениям");
 
     const int dimensions = rawOutput.size[1];
     const int rows       = rawOutput.size[2];
@@ -155,7 +203,7 @@ std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Siz
         const float cx = row[0], cy = row[1], w = row[2], h = row[3];
 
         const float left = (cx - w * 0.5f - info.padX) / info.scale;
-        const float top  = (cy - h * 0.5f - info.padY) / info.scale;
+        const float top  = (cy - h * 0.5f - info.padY) / info.scale + info.y_offset;
         const float boxW = w / info.scale;
         const float boxH = h / info.scale;
 
@@ -165,25 +213,32 @@ std::vector<Defect> BoardAnalyzer::postprocess(const cv::Mat& rawOutput, cv::Siz
         classIds.push_back(classId);
     }
 
-    // Подавление немаксимумов (NMS — non-maximum suppression):
-    // убирает дублирующиеся боксы на одном объекте.
-    std::vector<int> keep;
-    cv::dnn::NMSBoxes(boxes, confidences,
-                      cfg.SCORE_THRESHOLD, cfg.NMS_THRESHOLD, keep);
+    // ещё нужно сделать подавление немаксимумов (NMS — non-maximum suppression):
+    // и убирает дублирующиеся боксы на одном объекте и это делает функция которая эта ловит
+    return RawDetections{ std::move(confidences), std::move(boxes), std::move(classIds), roiSize };
+}
 
-    const cv::Rect roiBounds(cv::Point(), roiSize);
+
+std::vector<Defect> BoardAnalyzer::getDefects_withRemoveBoxes(const RawDetections& raw) const
+{
+    std::vector<int> keep;
+    cv::dnn::NMSBoxesBatched(raw.boxes, raw.confidences, raw.classIds,
+                             cfg.SCORE_THRESHOLD, cfg.NMS_THRESHOLD, keep);
+
+    const cv::Rect roiBounds(cv::Point(), raw.roiSize);
     std::vector<Defect> defects;
     defects.reserve(keep.size());
     for (int idx : keep)
     {
         Defect d;
-        d.bbox     = boxes[idx] & roiBounds;
-        d.severity = confidences[idx];
-        d.classIdx = classIds[idx];
+        d.bbox     = raw.boxes[idx] & roiBounds;
+        d.severity = raw.confidences[idx];
+        d.classIdx = raw.classIds[idx];
         defects.push_back(std::move(d));
     }
     return defects;
 }
+
 
 std::string BoardAnalyzer::classifyBoard(const cv::Scalar& avgColor, float defectRatio)
 {
