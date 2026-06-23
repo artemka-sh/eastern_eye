@@ -4,7 +4,6 @@
 
 #pragma once
 #include <fstream>
-#include <map>
 #include <string>
 #include <string_view>
 #include <print>
@@ -12,7 +11,6 @@
 
 class ConfigManager
 {
-    // std::map<std::string, std::string> configs;
 public:
     template <typename T>
     static std::string getTypeName()

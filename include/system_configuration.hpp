@@ -34,7 +34,7 @@ struct InspectionSystemConfig
 
 struct BoardAnalyzerConfig
 {
-    float INPUT_SIZE = 1280.0;
+    float INPUT_SIZE = 640.0;
     float SECTION_OVERLAP_PERCENT = 0.20;
     float TOLERANCE_FOR_TILES = 0.3;
     float SCORE_THRESHOLD = 0.5;

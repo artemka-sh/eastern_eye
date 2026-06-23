@@ -7,15 +7,14 @@ InspectionSystem::InspectionSystem() {
 
 void InspectionSystem::processFrame(const cv::Mat& frame) {
     frameCount_++;
-    
     std::vector<DetectedBoard> detections;
+    //как часто мы полагаемся чисто на трекер вместо полного сканирования кадра
     bool qualityDetectMoment = frameCount_ % cfg.detectInterval_ == 0;
     if (qualityDetectMoment) {
         detections = detector_.detect(frame);
-        tracker_.update(frame, detections);
+        tracker_.update(detections);
     } else {
-
-        tracker_.update(frame, {}); // пустой вектор — KCF просто двигает треки
+        tracker_.update({}); //работа без новых данных
     }
     
     // Проверка движения

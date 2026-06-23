@@ -7,6 +7,7 @@
 #include "system_configuration.hpp"
 #include "config_manager.hpp"
 
+
 class InspectionSystem
 {
 public:

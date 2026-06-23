@@ -1,128 +1,86 @@
-
 #include "board_tracker.hpp"
 #include <algorithm>
 #include <print>
 
-BoardTracker::BoardTracker() = default;
+BoardTracker::BoardTracker() : dtLastTime_(std::chrono::steady_clock::now()) {}
 
-void BoardTracker::update(const cv::Mat& frame, const std::vector<DetectedBoard>& detections) {
-    // 1. Обновляем координаты всех треков с помощью KCF
+void BoardTracker::update(const std::vector<DetectedBoard>& detections) {
+    auto now = std::chrono::steady_clock::now();
+    dt_ = std::chrono::duration<double>(now - dtLastTime_).count();
+    dtLastTime_ = now;
+
+    // Слепое предсказание для всех активных треков
     for (auto& track : activeTracks_) {
-        cv::Rect bbox = track.getBoundingBox(); // Берем текущий AABB
-
-        // Трекер пытается найти доску на новом кадре
-        bool success = track.tracker->update(frame, bbox);
-
-        if (success) {
-            // Если KCF нашел доску, мы сдвигаем математический центр нашей геометрии
-            track.geometry.rBox.center = cv::Point2f(bbox.x + bbox.width / 2.0f, bbox.y + bbox.height / 2.0f);
-            // track.geometry.rBox.size = cv::Size2f(bbox.width, bbox.height);
-
-            track.framesSeen++;
-        } else {
-            track.framesLost++;
-        }
+        track.currentPredBox = track.tracker.predict(dt_);
     }
 
-    // 2. Если в этом кадре отработал Детектор, матчим его результаты с треками
     if (!detections.empty()) {
         std::vector<bool> detectionMatched(detections.size(), false);
-        std::unordered_set<int> toRemove;
-        matchDetectionsToTracks(frame, detections, detectionMatched, toRemove);
-        activeTracks_.erase(
-        std::remove_if(activeTracks_.begin(), activeTracks_.end(),
-            [&](const BoardTrack& t) { return toRemove.count(t.id); }),
-        activeTracks_.end()
-       );
-        // 3. Создаём новые треки для детекций, которые ни с кем не совпали
+
+        for (auto& track : activeTracks_) {
+            float bestIoU = 0.0f;
+            int bestIdx = -1;
+
+            // поиск позиции которая лучше всего накладывается на предскзанную позицию
+            // можно будеть заменить на венгерский алгортим, что будет лучше
+            for (size_t i = 0; i < detections.size(); ++i) {
+                if (detectionMatched[i]) continue;
+
+                float iou = computeIoU(track.currentPredBox, detections[i].rBox);
+
+                if (iou > bestIoU && iou > cfg.minIouMatch_) {
+                    bestIoU = iou;
+                    bestIdx = static_cast<int>(i);
+                }
+            }
+
+            if (bestIdx >= 0) {
+                // Корректируем Калмана реальными данными с камеры
+                track.tracker.correct(detections[bestIdx].rBox);
+
+                track.geometry = detections[bestIdx];
+                track.framesLost = 0;
+                track.framesSeen++;
+                detectionMatched[bestIdx] = true;
+            } else {
+                track.framesLost++;
+                // Камера не нашла доску, отдаем предсказание для плавной отрисовки инерции
+                track.geometry.rBox = track.currentPredBox;
+            }
+        }
+
+        // Регистрируем новые доски, которые только что въехали в кадр
         for (size_t i = 0; i < detections.size(); ++i) {
             if (!detectionMatched[i]) {
-                createNewTrack(frame, detections[i]);
+                createNewTrack(detections[i]);
             }
+        }
+    } else {
+        // Кадры без работы детектора: доски едут чисто по математической инерции
+        for (auto& track : activeTracks_) {
+            track.framesLost++;
+            track.geometry.rBox = track.currentPredBox;
         }
     }
 
-    // 4. Подсчёт досок, пересекших линию
     countBoards();
-
-    // 5. Удаление потерянных и уехавших треков
     cleanupLostTracks();
 }
 
-//TODO: эта часть кода не используется
-
-void BoardTracker::matchDetectionsToTracks(const cv::Mat& frame,
-                                           const std::vector<DetectedBoard>& detections,
-                                           std::vector<bool>& matched,
-                                           std::unordered_set<int>& toRemove) {
-    for (auto& track : activeTracks_) {
-        if (track.framesLost > cfg.maxFramesLost_)
-        {
-            std::print("Максимальное количество кадров превышено {}", track.id);
-        }
-        float bestIoU = 0.0f;
-        int bestIdx = -1;
-
-        cv::Rect trackBbox = track.getBoundingBox();
-
-        // Ищем детекцию, которая лучше всего накладывается на текущий трек
-        for (size_t i = 0; i < detections.size(); ++i) {
-            if (matched[i]) continue;
-
-            cv::Rect detBbox = detections[i].rBox.boundingRect();
-            float iou = computeIoU(trackBbox, detBbox);
-
-            if (iou > bestIoU && iou > cfg.minIouMatch_) {
-                bestIoU = iou;
-                bestIdx = static_cast<int>(i);
-            }
-        }
-
-        // Детектор прогнался и не нашёл этот трек — считаем потерей
-        if (bestIdx < 0) {
-            track.framesLost++;
-            continue;
-        }
-
-        // БИНГО! Мы сопоставили трек и свежую детекцию
-        if (bestIdx >= 0) {
-            // 1. ПОЛНОСТЬЮ ОБНОВЛЯЕМ ГЕОМЕТРИЮ (теперь у нас свежие, точные углы!)
-            track.geometry = detections[bestIdx];
-            track.framesLost = 0;
-            // 2. Перезапускаем KCF с новой точной рамки, чтобы он не "уплывал" со временем
-            track.tracker = cv::TrackerKCF::create();
-            track.tracker->init(frame, track.getBoundingBox());
-            matched[bestIdx] = true;
-            for (const auto& other : activeTracks_)
-            {
-                if (other.id != track.id &&
-                    computeIoU(other.getBoundingBox(), track.getBoundingBox()) > cfg.minIouMatch_)
-                    {
-                        toRemove.insert(other.id);
-                    }
-            }
-        }
-    }
-}
-
-void BoardTracker::createNewTrack(const cv::Mat& frame, const DetectedBoard& board) {
+void BoardTracker::createNewTrack(const DetectedBoard& board) {
     BoardTrack track;
     track.id = nextId_++;
-
-    // Сохраняем всю прецизионную геометрию сразу при рождении трека
     track.geometry = board;
-
-    track.tracker = cv::TrackerKCF::create();
-    track.tracker->init(frame, track.getBoundingBox());
+    track.tracker.create(board.rBox);
 
     activeTracks_.push_back(std::move(track));
 }
 
 void BoardTracker::countBoards() {
     for (auto& track : activeTracks_) {
-        // Заменили track.centroid.x на track.getCentroid().x
         if (!track.counted &&
-            track.getCentroid().x > cfg.countLineX_ && track.getCentroid().y > cfg.countLineY_ &&
+            track.getCentroid().x > cfg.countLineX_ &&
+            track.getCentroid().y > cfg.countLineY_ &&
             track.framesSeen > cfg.minFramesStable_ &&
             track.framesLost == 0) {
 
@@ -136,19 +94,27 @@ void BoardTracker::cleanupLostTracks() {
     activeTracks_.erase(
         std::remove_if(activeTracks_.begin(), activeTracks_.end(),
             [this](const BoardTrack& t) {
-                //удалить если потерян долго или слишком близко к верху (куда уходят доски)
-                return t.framesLost > cfg.maxFramesLost_ || t.getBoundingBox().y + t.getBoundingBox().height/3 < 0  + 100;
+                // Удаляем трек, если он слишком долго не виделся камерой
+                // или уехал за верхнюю границу экрана
+                return t.framesLost > cfg.maxFramesLost_ || t.geometry.rBox.center.y < 100;
             }),
         activeTracks_.end()
     );
 }
 
-float BoardTracker::computeIoU(const cv::Rect& a, const cv::Rect& b) const {
-    cv::Rect intersection = a & b;
-    if (intersection.area() == 0) return 0.0f;
+float BoardTracker::computeIoU(const cv::RotatedRect& a, const cv::RotatedRect& b) const {
+    std::vector<cv::Point2f> intersectingRegion;
+    // может быть тяжело, проверить
+    int intersectionType = cv::rotatedRectangleIntersection(a, b, intersectingRegion);
 
-    float intersectArea = static_cast<float>(intersection.area());
-    float unionArea = static_cast<float>(a.area() + b.area()) - intersectArea;
+    if (intersectionType == cv::INTERSECT_NONE || intersectingRegion.empty()) {
+        return 0.0f;
+    }
+
+    float intersectArea = static_cast<float>(cv::contourArea(intersectingRegion));
+    float areaA = a.size.area();
+    float areaB = b.size.area();
+    float unionArea = areaA + areaB - intersectArea;
 
     return unionArea > 0 ? intersectArea / unionArea : 0.0f;
 }

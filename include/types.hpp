@@ -1,8 +1,7 @@
 #pragma once
 
 #include <opencv2/core.hpp>
-#include <opencv2/video/tracking.hpp> // Для cv::Tracker
-#include <opencv2/tracking.hpp>
+#include "kalman_tracker.hpp"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -30,8 +29,9 @@ struct DetectedBoard {
 struct BoardTrack {
     int id;
     DetectedBoard geometry;
-    
-    cv::Ptr<cv::Tracker> tracker;
+    cv::RotatedRect currentPredBox;
+
+    KalmanTracker tracker;
     
     int framesSeen = 0;
     int framesLost = 0;
